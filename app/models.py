@@ -5,7 +5,7 @@ from typing import Optional
 
 @dataclass
 class Car:
-    # url: str
+    url: str
     title: str
     price_usd: int
     odometer: int
