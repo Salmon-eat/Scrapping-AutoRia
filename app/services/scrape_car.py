@@ -134,9 +134,9 @@ async def parce_phone_number(
 
             return normalize_ua_phone(href.replace("tel:", ""))
 
-        except PWTimeout as e:
+        except PWTimeout:
             return None
-        except Exception as e:
+        except Exception:
             return None
         finally:
             await browser.close()

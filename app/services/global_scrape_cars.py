@@ -1,21 +1,17 @@
 import asyncio
-import os
+import logging
 import random
-from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
-from dotenv import load_dotenv
 from lxml import html as lxml_html
 
 from app.db import AsyncSessionLocal
 from app.repo import upsert_car
 from app.services.scrape_car import HEADERS, enrich_phone, parse_car
+from app.settings import get_settings
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(BASE_DIR / ".env")
-
-START_URL = os.getenv("BASE_URL")
+logger = logging.getLogger(__name__)
 
 
 def parse_listing_links(page_html: str) -> list[str]:
@@ -146,44 +142,48 @@ async def worker(
                 await upsert_car(session, car)
                 await session.commit()
 
-            print(
-                f"{car.title} | {car.price_usd} "
-                f"| {car.odometer} | {car.username} | {car.phone_number} "
-                f"| {url} | {car.car_vin} | {car.image_url} "
-                f"| {car.datatime_found} | {car.images_count}"
+            logger.info(
+                "CAR saved: title=%s price_usd=%s odometer=%s user=%s url=%s vin=%s images=%s found=%s",
+                car.title,
+                car.price_usd,
+                car.odometer,
+                car.username,
+                url,
+                car.car_vin,
+                car.images_count,
+                car.datatime_found,
             )
 
-        except Exception as e:
-            print(f"ERR {url} -> {e}")
+        except Exception:
+            logger.exception("Worker failed for url=%s", url)
         finally:
             queue.task_done()
 
 
-async def main():
-    if not START_URL:
-        raise RuntimeError("BASE_URL is not set in .env")
+async def run_scraper() -> None:
+    s = get_settings()
 
-    queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=100)
+    queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=s.queue_maxsize)
 
-    workers_count = 5
-    sem = asyncio.Semaphore(5)
-    phone_sem = asyncio.Semaphore(1)
+    sem = asyncio.Semaphore(s.workers_count)
+    phone_sem = asyncio.Semaphore(s.phone_workers)
 
     async with httpx.AsyncClient(
         headers=HEADERS, timeout=20, follow_redirects=True
     ) as client:
         worker_tasks = [
             asyncio.create_task(worker(i, client, queue, sem, phone_sem))
-            for i in range(workers_count)
+            for i in range(s.workers_count)
         ]
+
         await producer_links(
-            client, START_URL, queue, workers_count=workers_count, max_pages=10
+            client,
+            s.base_url,
+            queue,
+            workers_count=s.workers_count,
+            max_pages=s.max_pages,
         )
         await queue.join()
 
-        for t in worker_tasks:
-            await t
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        for worker_task in worker_tasks:
+            await worker_task

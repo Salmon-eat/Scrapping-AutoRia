@@ -2,36 +2,23 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.so
-*.egg-info/
-dist/
-build/
+*.log
 
 venv/
-ENV/
-env/
+.env
 
-.idea/
 .vscode/
-*.iml
+.idea/
 
 .DS_Store
 Thumbs.db
 
-*.log
+.playwright/
+ms-playwright/
 
-.env
-
-playwright/.cache/
-**/.playwright/
-**/playwright-report/
-**/test-results/
+dumps/
 
 .pytest_cache/
 
-.coverage
-htmlcov/
+*.pid
 
-dumps/
-*.dump
-*.sql
