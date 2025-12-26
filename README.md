@@ -6,7 +6,7 @@ An **asynchronous web scraper** for **auto.ria.com** that:
 - parses detailed car information,
 - asynchronously fetches seller phone numbers,
 - stores data in **PostgreSQL**,
-- **updates listings daily at 12:00**,
+- **updates listings daily at configured time (default 12:00)**,
 - creates database dumps on schedule.
 
 ## Tech Stack
@@ -40,6 +40,7 @@ Table `cars` contains:
 - `is_active`
 
 ## Configuration (`.env`)
+Create `.env` file based on `.env.example`:
 
 ```env
 BASE_URL=https://auto.ria.com/uk/car/used/
@@ -71,9 +72,15 @@ docker compose ps
 
 ### Initialize Database
 ***Create tables:***
+Windows:
 ```bash
 python -m app.init_db
 ```
+Linux / macOS:
+```bash
+python3 -m app.init_db
+```
+
 ***Check database manually:***
 ```bash
 docker exec -it autoria_db psql -U autoria -d autoria
@@ -84,15 +91,21 @@ docker exec -it autoria_db psql -U autoria -d autoria
 SELECT COUNT(*) FROM cars;
 ```
 ## Run Scraper
+Windows:
 ```bash
 python -m app.scheduler
 ```
+Linux / macOS:
+```bash
+python3 -m app.scheduler
+```
+
 ### Scheduler Logic
 - SCRAPE_TIME - when to update listings
 - DUMP_TIME - when to create DB dumps
 - dumps are saved to dumps/ directory (ignored by Git)
 
-## Notes!!!
+## Notes!
 - Phone numbers are fetched via Playwright (JS popup interaction)
 - Semaphores are used to limit concurrency
 - The project focuses on stability and correctness, not aggressive scraping speed
@@ -115,5 +128,5 @@ Scrapping-AutoRia/
 └── README.md
 
 ```
-### Example of a base
+### Database Example
 ![img.png](img.png)
