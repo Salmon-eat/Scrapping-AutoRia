@@ -1,6 +1,8 @@
+import asyncio
 import re
 
 import httpx
+from playwright.async_api import TimeoutError as PWTimeout
 from playwright.async_api import async_playwright
 
 from app.models import Car, now_time
@@ -14,7 +16,16 @@ HEADERS = {
 
 
 async def enrich_phone(client: httpx.AsyncClient, car: Car, page_url: str) -> Car:
-    car.phone_number = await parce_phone_number(client, page_url)
+    phone = await parce_phone_number(
+        client, page_url, nav_timeout=30000, phone_timeout=10000
+    )
+    if phone is None:
+        await asyncio.sleep(1.0)
+        phone = await parce_phone_number(
+            client, page_url, nav_timeout=45000, phone_timeout=20000
+        )
+
+    car.phone_number = phone
     return car
 
 
@@ -87,34 +98,45 @@ def normalize_ua_phone(s: str) -> str | None:
     if not digits:
         return None
     if digits.startswith("0") and len(digits) == 10:
-        digits = "38" + digits
+        return "38" + digits
     if digits.startswith("380") and len(digits) == 12:
         return digits
-    return None
+    return digits
 
 
-async def parce_phone_number(client, page_url: str) -> str | None:
+async def parce_phone_number(
+    client,
+    page_url: str,
+    nav_timeout: int = 30000,
+    phone_timeout: int = 10000,
+) -> str | None:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-
         try:
-            await page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(
+                page_url, wait_until="domcontentloaded", timeout=nav_timeout
+            )
+
             button = page.locator("button.size-large.conversion").first
             if await button.count() == 0:
                 return None
 
             await button.scroll_into_view_if_needed()
             await button.click(timeout=5000)
-            phone_link = page.locator('#autoPhonePopUpResponse a[href^="tel:"]').first
-            await phone_link.wait_for(timeout=10000)
-            href = await phone_link.get_attribute("href")
 
+            phone_link = page.locator('#autoPhonePopUpResponse a[href^="tel:"]').first
+            await phone_link.wait_for(timeout=phone_timeout)
+
+            href = await phone_link.get_attribute("href")
             if not href:
                 return None
+
             return normalize_ua_phone(href.replace("tel:", ""))
 
-        except Exception:
+        except PWTimeout as e:
+            return None
+        except Exception as e:
             return None
         finally:
             await browser.close()

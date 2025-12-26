@@ -8,6 +8,8 @@ import httpx
 from dotenv import load_dotenv
 from lxml import html as lxml_html
 
+from app.db import AsyncSessionLocal
+from app.repo import upsert_car
 from app.services.scrape_car import HEADERS, enrich_phone, parse_car
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -131,14 +133,18 @@ async def worker(
 
             async with sem:
                 r = await client.get(url)
-
             r.raise_for_status()
-            tree = lxml_html.fromstring(r.text)
 
+            tree = lxml_html.fromstring(r.text)
             car = parse_car(tree)
             car.url = url
+
             async with phone_sem:
                 car = await enrich_phone(client, car, url)
+
+            async with AsyncSessionLocal() as session:
+                await upsert_car(session, car)
+                await session.commit()
 
             print(
                 f"{car.title} | {car.price_usd} "
